@@ -1,20 +1,36 @@
 import { Avatar, Button, Spinner, Tooltip as HeroTooltip } from '@heroui/react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
+  AlertCircle,
   ArrowDownAZ,
   ArrowUpAZ,
   CheckCheck,
   Copy,
   Menu,
+  Pin,
+  PinOff,
   RefreshCw,
   Search,
+  ShieldAlert,
+  ShieldCheck,
   Star,
   Trash2,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { allEmailDelete, allEmailLatest, allEmailList } from '@/api/all-email';
-import { emailDelete, emailLatest, emailList, emailRead } from '@/api/email';
+import {
+  emailDelete,
+  emailLatest,
+  emailList,
+  emailListFolder,
+  emailListImportant,
+  emailListSpam,
+  emailRead,
+  emailSetImportant,
+  emailSetPin,
+  emailSetSpam,
+} from '@/api/email';
 import { starAdd, starCancel, starList } from '@/api/star';
 import { colorFor, EmailUnreadEnum, fromNow, htmlToText, initials } from '@/lib/utils';
 import { notifySuccess } from '@/lib/notify';
@@ -27,6 +43,7 @@ const Tooltip = HeroTooltip as any;
 
 type Props = {
   kind: MailboxKind;
+  folderId?: number;
   onOpenDetail?: () => void;
 };
 
@@ -39,7 +56,14 @@ function normalizeEmail(email: Email): Email {
   };
 }
 
-export default function MessageList({ kind, onOpenDetail }: Props) {
+function sortWithPinned(list: Email[]): Email[] {
+  const top = list.filter((e) => e.pinned === 1);
+  const bottom = list.filter((e) => e.pinned === -1);
+  const middle = list.filter((e) => !e.pinned);
+  return [...top, ...middle, ...bottom];
+}
+
+export default function MessageList({ kind, folderId, onOpenDetail }: Props) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement | null>(null);
   const currentAccountId = useAppStore((state) => state.currentAccountId);
@@ -75,41 +99,34 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
 
   const fetchPage = useCallback(
     async (cursor = 0): Promise<EmailListResult> => {
-      if (kind === 'starred') {
-        return (await starList(cursor, 50)) as EmailListResult;
-      }
+      if (kind === 'starred') return (await starList(cursor, 50)) as EmailListResult;
       if (kind === 'all-mail') {
         return (await allEmailList({
-          emailId: cursor,
-          size: 50,
-          timeSort,
-          type: allMailType,
-          subject: searchText,
-          accountEmail: searchText,
-          userEmail: searchText,
-          name: searchText,
+          emailId: cursor, size: 50, timeSort,
+          type: allMailType, subject: searchText,
+          accountEmail: searchText, userEmail: searchText, name: searchText,
         })) as EmailListResult;
       }
+      if (kind === 'spam') return (await emailListSpam(cursor, 50, timeSort)) as EmailListResult;
+      if (kind === 'important') return (await emailListImportant(cursor, 50, timeSort)) as EmailListResult;
+      if (kind === 'folder') return (await emailListFolder(folderId || 0, cursor, 50, timeSort)) as EmailListResult;
       return (await emailList(
-        currentAccountId,
-        0,
-        cursor,
-        timeSort,
-        50,
+        currentAccountId, 0, cursor, timeSort, 50,
         kind === 'sent' ? 1 : 0,
+        kind === 'inbox', // excludeSpam
       )) as EmailListResult;
     },
-    [allMailType, currentAccountId, kind, searchText, timeSort],
+    [allMailType, currentAccountId, folderId, kind, searchText, timeSort],
   );
 
   const refresh = useCallback(async () => {
-    if (kind !== 'starred' && kind !== 'all-mail' && !currentAccountId) return;
+    if (kind !== 'starred' && kind !== 'all-mail' && kind !== 'spam' && kind !== 'important' && kind !== 'folder' && !currentAccountId) return;
     setLoading(true);
     setNoMore(false);
     setSelectedIds([]);
     try {
       const data = await fetchPage(0);
-      const list = (data.list || []).map(normalizeEmail);
+      const list = sortWithPinned((data.list || []).map(normalizeEmail));
       setItems(list);
       setTotal(data.total || list.length);
       setLatest(data.latestEmail || list[0] || null);
@@ -123,19 +140,21 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
     if (loading || following || noMore || !items.length) return;
     setFollowing(true);
     try {
-      const cursor = items.at(-1)?.emailId || 0;
+      const unpinned = items.filter((e) => !e.pinned);
+      const cursor = unpinned.at(-1)?.emailId || items.at(-1)?.emailId || 0;
       const data = await fetchPage(cursor);
       const list = (data.list || []).map(normalizeEmail);
-      setItems((current) => [...current, ...list.filter((item) => !current.some((cur) => cur.emailId === item.emailId))]);
+      setItems((current) => {
+        const merged = [...current, ...list.filter((item) => !current.some((cur) => cur.emailId === item.emailId))];
+        return sortWithPinned(merged);
+      });
       setNoMore(list.length < 50);
     } finally {
       setFollowing(false);
     }
   }
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  useEffect(() => { refresh(); }, [refresh]);
 
   useEffect(() => {
     if (!deleteIds.length) return;
@@ -169,7 +188,7 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
           list.map(normalizeEmail).forEach((item) => {
             if (!next.some((cur) => cur.emailId === item.emailId)) next.unshift(item);
           });
-          return next;
+          return sortWithPinned(next);
         });
         setLatest(list[0]);
       }
@@ -223,11 +242,47 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
     if (!selectedIds.length) return;
     await emailRead(selectedIds);
     setItems((current) =>
-      current.map((item) =>
-        selectedIds.includes(item.emailId) ? { ...item, unread: EmailUnreadEnum.READ } : item,
-      ),
+      current.map((item) => selectedIds.includes(item.emailId) ? { ...item, unread: EmailUnreadEnum.READ } : item),
     );
     setSelectedIds([]);
+  }
+
+  async function markSpamSelected(isSpam: 0 | 1) {
+    if (!selectedIds.length) return;
+    await emailSetSpam(selectedIds, isSpam);
+    setItems((current) =>
+      kind === 'spam'
+        ? current.filter((item) => !selectedIds.includes(item.emailId))
+        : current.map((item) => selectedIds.includes(item.emailId) ? { ...item, isSpam } : item),
+    );
+    setSelectedIds([]);
+    notifySuccess(isSpam ? t('markedSpam') : t('markedNotSpam'));
+  }
+
+  async function markImportantSelected(isImportant: 0 | 1) {
+    if (!selectedIds.length) return;
+    await emailSetImportant(selectedIds, isImportant);
+    setItems((current) =>
+      kind === 'important'
+        ? current.filter((item) => !selectedIds.includes(item.emailId))
+        : current.map((item) => selectedIds.includes(item.emailId) ? { ...item, isImportant } : item),
+    );
+    setSelectedIds([]);
+    notifySuccess(isImportant ? t('markedImportant') : t('markedNotImportant'));
+  }
+
+  async function togglePin(email: Email) {
+    const pinned: -1 | 0 | 1 = email.pinned === 1 ? 0 : 1;
+    await emailSetPin(email.emailId, pinned);
+    setItems((current) => sortWithPinned(current.map((item) => item.emailId === email.emailId ? { ...item, pinned } : item)));
+    notifySuccess(pinned === 1 ? t('pinnedTop') : t('unpinned'));
+  }
+
+  async function pinBottomItem(email: Email) {
+    const pinned: -1 | 0 | 1 = email.pinned === -1 ? 0 : -1;
+    await emailSetPin(email.emailId, pinned);
+    setItems((current) => sortWithPinned(current.map((item) => item.emailId === email.emailId ? { ...item, pinned } : item)));
+    notifySuccess(pinned === -1 ? t('pinnedBottom') : t('unpinned'));
   }
 
   async function copyCode(code?: string) {
@@ -254,9 +309,7 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
           <input
             className="min-w-0 flex-1 bg-transparent text-lg outline-none placeholder:text-muted"
             onChange={(event) => setSearchText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') refresh();
-            }}
+            onKeyDown={(event) => { if (event.key === 'Enter') refresh(); }}
             placeholder={`${t('search')}...`}
             value={searchText}
           />
@@ -270,10 +323,7 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
               key={type || 'all'}
               size="sm"
               variant={allMailType === type ? 'primary' : 'outline'}
-              onPress={() => {
-                setAllMailType(type);
-                setTimeout(refresh);
-              }}
+              onPress={() => { setAllMailType(type); setTimeout(refresh); }}
             >
               {type || t('all')}
             </Button>
@@ -310,9 +360,31 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
                 </ConfirmButton>
               ) : null}
               {kind === 'inbox' ? (
-                <button className="icon-button" onClick={readSelected} type="button">
+                <button className="icon-button" onClick={readSelected} title={t('markAsRead')} type="button">
                   <CheckCheck className="size-5" />
                 </button>
+              ) : null}
+              {kind !== 'all-mail' && kind !== 'starred' ? (
+                <>
+                  <Tooltip content={kind === 'spam' ? t('markNotSpam') : t('markSpam')}>
+                    <button
+                      className="icon-button"
+                      onClick={() => markSpamSelected(kind === 'spam' ? 0 : 1)}
+                      type="button"
+                    >
+                      {kind === 'spam' ? <ShieldCheck className="size-5" /> : <ShieldAlert className="size-5" />}
+                    </button>
+                  </Tooltip>
+                  <Tooltip content={kind === 'important' ? t('markNotImportant') : t('markImportant')}>
+                    <button
+                      className="icon-button"
+                      onClick={() => markImportantSelected(kind === 'important' ? 0 : 1)}
+                      type="button"
+                    >
+                      <AlertCircle className={`size-5 ${kind === 'important' ? 'text-amber-500' : ''}`} />
+                    </button>
+                  </Tooltip>
+                </>
               ) : null}
             </>
           ) : null}
@@ -322,9 +394,7 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
 
       <div className="relative flex-1 overflow-auto px-4 py-3" ref={parentRef}>
         {loading ? (
-          <div className="flex h-full items-center justify-center">
-            <Spinner />
-          </div>
+          <div className="flex h-full items-center justify-center"><Spinner /></div>
         ) : items.length === 0 ? (
           <div className="flex h-full items-center justify-center text-muted">{t('noMessagesFound')}</div>
         ) : (
@@ -336,12 +406,7 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
                   <div
                     className="flex items-center justify-center text-sm text-muted"
                     key={`loader-${virtual.index}`}
-                    style={{
-                      height: virtual.size,
-                      position: 'absolute',
-                      transform: `translateY(${virtual.start}px)`,
-                      width: '100%',
-                    }}
+                    style={{ height: virtual.size, position: 'absolute', transform: `translateY(${virtual.start}px)`, width: '100%' }}
                   >
                     {following ? <Spinner size="sm" /> : t('noMoreData')}
                   </div>
@@ -349,19 +414,21 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
               }
 
               const unread = kind === 'inbox' && email.unread === EmailUnreadEnum.UNREAD;
+              const isPinnedTop = email.pinned === 1;
+              const isPinnedBottom = email.pinned === -1;
 
               return (
                 <div
                   className="pb-2"
                   key={email.emailId}
-                  style={{
-                    minHeight: virtual.size,
-                    position: 'absolute',
-                    transform: `translateY(${virtual.start}px)`,
-                    width: '100%',
-                  }}
+                  style={{ minHeight: virtual.size, position: 'absolute', transform: `translateY(${virtual.start}px)`, width: '100%' }}
                 >
-                  <button className="mail-row w-full text-left" data-active={selectedEmail?.emailId === email.emailId} onClick={() => open(email)} type="button">
+                  <button
+                    className="mail-row w-full text-left"
+                    data-active={selectedEmail?.emailId === email.emailId}
+                    onClick={() => open(email)}
+                    type="button"
+                  >
                     <Avatar className="mail-avatar size-14" style={{ background: colorFor(email.sendEmail || email.name) }}>
                       <Avatar.Fallback>{initials(email.name || email.sendEmail)}</Avatar.Fallback>
                     </Avatar>
@@ -372,15 +439,16 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
                           onChange={(event) => {
                             event.stopPropagation();
                             setSelectedIds((ids) =>
-                              event.target.checked
-                                ? [...ids, email.emailId]
-                                : ids.filter((id) => id !== email.emailId),
+                              event.target.checked ? [...ids, email.emailId] : ids.filter((id) => id !== email.emailId),
                             );
                           }}
                           onClick={(event) => event.stopPropagation()}
                           type="checkbox"
                         />
                         <div className={`min-w-0 flex-1 truncate text-[17px] ${unread ? 'font-bold' : 'font-semibold'}`}>
+                          {isPinnedTop ? <Pin className="mr-1 inline size-3 text-blue-500" /> : null}
+                          {isPinnedBottom ? <PinOff className="mr-1 inline size-3 text-muted" /> : null}
+                          {email.isImportant ? <AlertCircle className="mr-1 inline size-3 text-amber-500" /> : null}
                           {email.name || email.sendEmail || email.toEmail}
                         </div>
                       </div>
@@ -388,19 +456,15 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
                         {email.code ? (
                           <button
                             className="mr-1 text-blue-600"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              copyCode(email.code);
-                            }}
+                            onClick={(event) => { event.stopPropagation(); copyCode(email.code); }}
                             type="button"
                           >
-                            [{t('codeLabel')}
-                            {email.code}]
+                            [{t('codeLabel')}{email.code}]
                           </button>
                         ) : null}
-                        {email.subject || '\u200B'}
+                        {email.subject || '​'}
                       </div>
-                      <div className="line-clamp-1 text-[15px] text-muted">{email.formatText || '\u200B'}</div>
+                      <div className="line-clamp-1 text-[15px] text-muted">{email.formatText || '​'}</div>
                     </div>
                     <div className="flex flex-col items-end justify-between gap-2">
                       <div className="flex items-center justify-end gap-2">
@@ -414,10 +478,7 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
                           <Tooltip content={t('copyCode')}>
                             <button
                               className="icon-button size-8"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                copyCode(email.code);
-                              }}
+                              onClick={(event) => { event.stopPropagation(); copyCode(email.code); }}
                               type="button"
                             >
                               <Copy className="size-4" />
@@ -425,16 +486,24 @@ export default function MessageList({ kind, onOpenDetail }: Props) {
                           </Tooltip>
                         ) : null}
                         {kind !== 'all-mail' ? (
-                          <button
-                            className="icon-button size-8"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              toggleStar(email);
-                            }}
-                            type="button"
-                          >
-                            <Star className={`size-5 ${email.isStar ? 'fill-amber-400 text-amber-400' : 'text-muted'}`} />
-                          </button>
+                          <>
+                            <Tooltip content={isPinnedTop ? t('unpinTop') : t('pinTop')}>
+                              <button
+                                className="icon-button size-8"
+                                onClick={(event) => { event.stopPropagation(); togglePin(email); }}
+                                type="button"
+                              >
+                                <Pin className={`size-4 ${isPinnedTop ? 'fill-blue-500 text-blue-500' : 'text-muted'}`} />
+                              </button>
+                            </Tooltip>
+                            <button
+                              className="icon-button size-8"
+                              onClick={(event) => { event.stopPropagation(); toggleStar(email); }}
+                              type="button"
+                            >
+                              <Star className={`size-5 ${email.isStar ? 'fill-amber-400 text-amber-400' : 'text-muted'}`} />
+                            </button>
+                          </>
                         ) : null}
                       </div>
                     </div>

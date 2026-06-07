@@ -24,6 +24,10 @@ export const email = sqliteTable('email', {
 	resendEmailId: text('resend_email_id'),
 	message: text('message'),
 	unread: integer('unread').default(0).notNull(),
+	pinned: integer('pinned').default(0).notNull(),
+	isSpam: integer('is_spam').default(0).notNull(),
+	isImportant: integer('is_important').default(0).notNull(),
+	folderId: integer('folder_id').default(0).notNull(),
 	createTime: text('create_time').default(sql`CURRENT_TIMESTAMP`).notNull(),
 	isDel: integer('is_del').default(0).notNull()
 });

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Account, Lang, SelectedEmailContext, User } from '@/types';
+import type { Account, Folder, Lang, SelectedEmailContext, User } from '@/types';
 
 type ComposerMode = 'new' | 'reply' | 'forward' | 'draft';
 
@@ -28,6 +28,8 @@ type AppState = {
   starChangedValue: 0 | 1;
   sendRecipientRecord: string[];
   composer: ComposerState;
+  folders: Folder[];
+  currentFolderId: number;
   setLang: (lang: Lang) => void;
   setDark: (dark: boolean) => void;
   setSidebarOpen: (open: boolean) => void;
@@ -44,6 +46,8 @@ type AppState = {
   openComposer: (state?: Partial<ComposerState>) => void;
   closeComposer: () => void;
   resetSession: () => void;
+  setFolders: (folders: Folder[]) => void;
+  setCurrentFolderId: (id: number) => void;
 };
 
 const defaultSelectedEmail: SelectedEmailContext = {
@@ -83,6 +87,8 @@ export const useAppStore = create<AppState>()(
       starChangedValue: 0,
       sendRecipientRecord: [],
       composer: { open: false, mode: 'new' },
+      folders: [],
+      currentFolderId: 0,
       setLang: (lang) => set({ lang }),
       setDark: (dark) => set({ dark }),
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
@@ -112,7 +118,11 @@ export const useAppStore = create<AppState>()(
           currentAccountId: 0,
           selectedEmail: defaultSelectedEmail,
           deleteIds: [],
+          folders: [],
+          currentFolderId: 0,
         }),
+      setFolders: (folders) => set({ folders }),
+      setCurrentFolderId: (currentFolderId) => set({ currentFolderId }),
     }),
     {
       name: 'mail-web-store',

@@ -14,6 +14,7 @@ import ManagementPage from '@/pages/ManagementPage';
 import AnalysisPage from '@/pages/AnalysisPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import SystemSettingsPage from '@/pages/SystemSettingsPage';
+import SubscriptionPage from '@/pages/SubscriptionPage';
 
 function useBootstrap() {
   const [loading, setLoading] = useState(true);
@@ -113,9 +114,13 @@ export default function App() {
       { path: '/inbox', element: <MailPage kind="inbox" /> },
       { path: '/sent', element: <MailPage kind="sent" />, perm: 'email:send' },
       { path: '/starred', element: <MailPage kind="starred" /> },
+      { path: '/important', element: <MailPage kind="important" /> },
+      { path: '/spam', element: <MailPage kind="spam" /> },
+      { path: '/folder/:folderId', element: <MailPage kind="folder" /> },
       { path: '/drafts', element: <DraftsPage />, perm: 'email:send' },
       { path: '/message', element: <MailPage kind="inbox" forceDetail /> },
       { path: '/settings', element: <SettingsPage /> },
+      { path: '/subscriptions', element: <SubscriptionPage /> },
       { path: '/all-mail', element: <MailPage kind="all-mail" />, perm: 'all-email:query' },
       { path: '/all-users', element: <ManagementPage resource="users" />, perm: 'user:query' },
       { path: '/role', element: <ManagementPage resource="roles" />, perm: 'role:query' },

@@ -319,6 +319,39 @@ const zh = {
   document: '文档',
   support: '支持',
   supportDesc: '赞助与支持',
+  // Folders
+  folders: '文件夹',
+  addFolder: '新建文件夹',
+  editFolder: '编辑文件夹',
+  folderName: '文件夹名称',
+  noFolders: '暂无文件夹',
+  noFolder: '无文件夹',
+  keepEmails: '保留邮件',
+  deleteEmailsToo: '同时删除邮件',
+  deleteFolderTitle: '删除文件夹',
+  deleteFolderDesc: '即将删除文件夹「{{name}}」，请选择其中邮件的处理方式：',
+  // Spam / Important
+  spam: '垃圾邮件',
+  important: '重要邮件',
+  markSpam: '标记为垃圾',
+  markNotSpam: '取消垃圾标记',
+  markImportant: '标记为重要',
+  markNotImportant: '取消重要标记',
+  markedSpam: '已标记为垃圾',
+  markedNotSpam: '已取消垃圾标记',
+  markedImportant: '已标记为重要',
+  markedNotImportant: '已取消重要标记',
+  // Pin
+  pinTop: '置顶',
+  pinBottom: '置底',
+  unpinTop: '取消置顶',
+  unpinBottom: '取消置底',
+  pinnedTop: '已置顶',
+  pinnedBottom: '已置底',
+  unpinned: '已取消固定',
+  // Subscriptions
+  subscriptions: '管理订阅',
+  noSubscriptions: '暂无订阅记录',
 };
 
 const en = {
@@ -639,6 +672,39 @@ const en = {
   document: 'Docs',
   support: 'Support',
   supportDesc: 'Sponsor and support',
+  // Folders
+  folders: 'Folders',
+  addFolder: 'New folder',
+  editFolder: 'Edit folder',
+  folderName: 'Folder name',
+  noFolders: 'No folders yet',
+  noFolder: 'No folder',
+  keepEmails: 'Keep emails',
+  deleteEmailsToo: 'Delete emails too',
+  deleteFolderTitle: 'Delete folder',
+  deleteFolderDesc: 'Deleting folder "{{name}}". Choose what to do with its emails:',
+  // Spam / Important
+  spam: 'Spam',
+  important: 'Important',
+  markSpam: 'Mark as spam',
+  markNotSpam: 'Not spam',
+  markImportant: 'Mark as important',
+  markNotImportant: 'Unmark important',
+  markedSpam: 'Marked as spam',
+  markedNotSpam: 'Removed spam mark',
+  markedImportant: 'Marked as important',
+  markedNotImportant: 'Removed important mark',
+  // Pin
+  pinTop: 'Pin to top',
+  pinBottom: 'Pin to bottom',
+  unpinTop: 'Unpin from top',
+  unpinBottom: 'Unpin from bottom',
+  pinnedTop: 'Pinned to top',
+  pinnedBottom: 'Pinned to bottom',
+  unpinned: 'Unpinned',
+  // Subscriptions
+  subscriptions: 'Subscriptions',
+  noSubscriptions: 'No subscriptions yet',
 };
 
 i18n.use(initReactI18next).init({

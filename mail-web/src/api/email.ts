@@ -8,9 +8,10 @@ export function emailList(
   timeSort = 0,
   size = 50,
   type = 0,
+  excludeSpam = false,
 ) {
   return http.get('/email/list', {
-    params: { accountId, allReceive, emailId, timeSort, size, type },
+    params: { accountId, allReceive, emailId, timeSort, size, type, ...(excludeSpam ? { isSpam: 0 } : {}) },
   });
 }
 
@@ -50,4 +51,32 @@ export function emailSend(form: any, progress?: (e: ProgressEvent) => void) {
     onUploadProgress: (e) => progress?.(e as unknown as ProgressEvent),
     noMsg: true,
   } as any);
+}
+
+export function emailSetSpam(emailIds: number[], isSpam: 0 | 1) {
+  return http.put('/email/spam', { emailIds, isSpam });
+}
+
+export function emailSetImportant(emailIds: number[], isImportant: 0 | 1) {
+  return http.put('/email/important', { emailIds, isImportant });
+}
+
+export function emailSetPin(emailId: number, pinned: -1 | 0 | 1) {
+  return http.put('/email/pin', { emailId, pinned });
+}
+
+export function emailSetFolder(emailIds: number[], folderId: number) {
+  return http.put('/email/folder', { emailIds, folderId });
+}
+
+export function emailListSpam(emailId = 0, size = 50, timeSort = 0) {
+  return http.get('/email/list', { params: { emailId, size, timeSort, isSpam: 1 } });
+}
+
+export function emailListImportant(emailId = 0, size = 50, timeSort = 0) {
+  return http.get('/email/list', { params: { emailId, size, timeSort, isImportant: 1 } });
+}
+
+export function emailListFolder(folderId: number, emailId = 0, size = 50, timeSort = 0) {
+  return http.get('/email/list', { params: { emailId, size, timeSort, folderId } });
 }

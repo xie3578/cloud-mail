@@ -1,9 +1,9 @@
 import { Avatar, ScrollShadow, Tooltip as HeroTooltip } from '@heroui/react';
-import { ArrowLeft, Download, Languages, Loader2, Reply, Star, Trash2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Download, Languages, Loader2, Pin, Reply, ShieldAlert, ShieldCheck, Star, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { allEmailDelete } from '@/api/all-email';
-import { emailDelete, emailRead, emailTranslate, emailTranslationStatus } from '@/api/email';
+import { emailDelete, emailRead, emailSetImportant, emailSetPin, emailSetSpam, emailTranslate, emailTranslationStatus } from '@/api/email';
 import { starAdd, starCancel } from '@/api/star';
 import { hasPerm } from '@/lib/permissions';
 import {
@@ -116,6 +116,33 @@ export default function MessageDetail({
     onBack?.();
   }
 
+  async function togglePin() {
+    if (!email) return;
+    const pinned: -1 | 0 | 1 = email.pinned === 1 ? 0 : 1;
+    await emailSetPin(email.emailId, pinned);
+    email.pinned = pinned;
+    selectEmail({ ...selected, email: { ...email } });
+    notifySuccess(pinned === 1 ? t('pinnedTop') : t('unpinned'));
+  }
+
+  async function toggleSpam() {
+    if (!email) return;
+    const isSpam = email.isSpam ? 0 : 1;
+    await emailSetSpam([email.emailId], isSpam as 0 | 1);
+    email.isSpam = isSpam;
+    selectEmail({ ...selected, email: { ...email } });
+    notifySuccess(isSpam ? t('markedSpam') : t('markedNotSpam'));
+  }
+
+  async function toggleImportant() {
+    if (!email) return;
+    const isImportant = email.isImportant ? 0 : 1;
+    await emailSetImportant([email.emailId], isImportant as 0 | 1);
+    email.isImportant = isImportant;
+    selectEmail({ ...selected, email: { ...email } });
+    notifySuccess(isImportant ? t('markedImportant') : t('markedNotImportant'));
+  }
+
   async function toggleTranslation() {
     if (!email || translating) return;
     if (showTranslation) {
@@ -182,6 +209,25 @@ export default function MessageDetail({
                 <Star className={`size-5 ${email.isStar ? 'fill-amber-400 text-amber-400' : ''}`} />
               </button>
             </Tooltip>
+          ) : null}
+          {selected.showStar ? (
+            <>
+              <Tooltip content={email.pinned === 1 ? t('unpinTop') : t('pinTop')}>
+                <button className="icon-button" onClick={togglePin} type="button">
+                  <Pin className={`size-5 ${email.pinned === 1 ? 'fill-blue-500 text-blue-500' : ''}`} />
+                </button>
+              </Tooltip>
+              <Tooltip content={email.isImportant ? t('markNotImportant') : t('markImportant')}>
+                <button className="icon-button" onClick={toggleImportant} type="button">
+                  <AlertCircle className={`size-5 ${email.isImportant ? 'fill-amber-400 text-amber-400' : ''}`} />
+                </button>
+              </Tooltip>
+              <Tooltip content={email.isSpam ? t('markNotSpam') : t('markSpam')}>
+                <button className="icon-button" onClick={toggleSpam} type="button">
+                  {email.isSpam ? <ShieldCheck className="size-5 text-green-500" /> : <ShieldAlert className="size-5" />}
+                </button>
+              </Tooltip>
+            </>
           ) : null}
           {showTranslateButton ? (
             <Tooltip content={translationTooltip}>

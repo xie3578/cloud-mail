@@ -76,11 +76,36 @@ export type Email = {
   unread?: number;
   isStar?: number;
   isDel?: number;
+  pinned?: number;
+  isSpam?: number;
+  isImportant?: number;
+  folderId?: number;
   code?: string;
   message?: string;
   userEmail?: string;
   attList?: Attachment[];
   checked?: boolean;
+  [key: string]: any;
+};
+
+export type Folder = {
+  folderId: number;
+  userId?: number;
+  name: string;
+  color: string;
+  sort?: number;
+  emailCount?: number;
+  createTime?: string;
+  [key: string]: any;
+};
+
+export type Subscription = {
+  subscriptionId: number;
+  userId?: number;
+  senderEmail: string;
+  name: string;
+  emailCount?: number;
+  createTime?: string;
   [key: string]: any;
 };
 
@@ -90,7 +115,7 @@ export type EmailListResult = {
   latestEmail?: Email;
 };
 
-export type MailboxKind = 'inbox' | 'sent' | 'starred' | 'drafts' | 'all-mail';
+export type MailboxKind = 'inbox' | 'sent' | 'starred' | 'drafts' | 'all-mail' | 'spam' | 'important' | 'folder';
 
 export type SelectedEmailContext = {
   email: Email | null;

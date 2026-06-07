@@ -67,7 +67,7 @@ const emailService = {
 
 	async list(c, params, userId) {
 
-		let { emailId, type, accountId, size, timeSort, allReceive } = params;
+		let { emailId, type, accountId, size, timeSort, allReceive, isSpam, isImportant, folderId } = params;
 
 		size = Number(size);
 		emailId = Number(emailId);
@@ -94,32 +94,51 @@ const emailService = {
 			allReceive = accountRow.allReceive;
 		}
 
+		const extraConditions = [];
+
+		// spam / important / folder filters
+		if (isSpam !== undefined && isSpam !== '') {
+			extraConditions.push(eq(email.isSpam, Number(isSpam)));
+		}
+		if (isImportant !== undefined && isImportant !== '') {
+			extraConditions.push(eq(email.isImportant, Number(isImportant)));
+		}
+		if (folderId !== undefined && folderId !== '') {
+			extraConditions.push(eq(email.folderId, Number(folderId)));
+		}
+
+		// for spam/important views there is no account/type filter
+		const isSpecialView = (isSpam !== undefined && isSpam !== '') || (isImportant !== undefined && isImportant !== '') || (folderId !== undefined && folderId !== '');
+
+		const baseConditions = isSpecialView
+			? [eq(email.userId, userId), eq(email.isDel, isDel.NORMAL), ...extraConditions]
+			: [
+				allReceive ? eq(1, 1) : eq(email.accountId, accountId),
+				eq(email.userId, userId),
+				eq(email.type, Number(type) || 0),
+				eq(email.isDel, isDel.NORMAL),
+				...extraConditions
+			];
+
+		const cursorCondition = timeSort ? gt(email.emailId, emailId) : lt(email.emailId, emailId);
+
+		const joinConditions = isSpecialView ? [] : [account];
+
 		const query = orm(c)
-			.select({
-				...email,
-				starId: star.starId
-			})
+			.select({ ...email, starId: star.starId })
 			.from(email)
-			.leftJoin(
-				star,
-				and(
-					eq(star.emailId, email.emailId),
-					eq(star.userId, userId)
-				)
-			).leftJoin(
-				account,
-				eq(account.accountId, email.accountId)
-			)
-			.where(
-				and(
-					allReceive ? eq(1,1) : eq(email.accountId, accountId),
-					eq(email.userId, userId),
-					timeSort ? gt(email.emailId, emailId) : lt(email.emailId, emailId),
-					eq(email.type, type),
-					eq(email.isDel, isDel.NORMAL),
-					eq(account.isDel, isDel.NORMAL)
-				)
-			);
+			.leftJoin(star, and(eq(star.emailId, email.emailId), eq(star.userId, userId)));
+
+		if (!isSpecialView) {
+			query.leftJoin(account, eq(account.accountId, email.accountId));
+		}
+
+		const whereConditions = [...baseConditions, cursorCondition];
+		if (!isSpecialView) {
+			whereConditions.push(eq(account.isDel, isDel.NORMAL));
+		}
+
+		query.where(and(...whereConditions));
 
 		if (timeSort) {
 			query.orderBy(asc(email.emailId));
@@ -129,46 +148,37 @@ const emailService = {
 
 		const listQuery = query.limit(size).all();
 
-		const totalQuery = orm(c).select({ total: count() }).from(email)
-			.leftJoin(
-				account,
-				eq(account.accountId, email.accountId)
-			)
-			.where(
-				and(
-					allReceive ? eq(1,1) : eq(email.accountId, accountId),
-					eq(email.userId, userId),
-					eq(email.type, type),
-					eq(email.isDel, isDel.NORMAL),
-					eq(account.isDel, isDel.NORMAL)
-				)
-		).get();
+		const totalBaseQuery = orm(c).select({ total: count() }).from(email);
+		if (!isSpecialView) {
+			totalBaseQuery.leftJoin(account, eq(account.accountId, email.accountId));
+		}
+		const totalWhere = isSpecialView
+			? and(...baseConditions)
+			: and(...baseConditions, eq(account.isDel, isDel.NORMAL));
+		totalBaseQuery.where(totalWhere);
+		const totalQuery = totalBaseQuery.get();
 
-		const latestEmailQuery = orm(c).select().from(email).where(
-			and(
-				allReceive ? eq(1,1) : eq(email.accountId, accountId),
+		const latestWhere = isSpecialView
+			? and(eq(email.userId, userId), eq(email.isDel, isDel.NORMAL), ...extraConditions)
+			: and(
+				allReceive ? eq(1, 1) : eq(email.accountId, accountId),
 				eq(email.userId, userId),
-				eq(email.type, type),
-				eq(email.isDel, isDel.NORMAL)
-			))
+				eq(email.type, Number(type) || 0),
+				eq(email.isDel, isDel.NORMAL),
+				...extraConditions
+			);
+		const latestEmailQuery = orm(c).select().from(email)
+			.where(latestWhere)
 			.orderBy(desc(email.emailId)).limit(1).get();
 
 		let [list, totalRow, latestEmail] = await Promise.all([listQuery, totalQuery, latestEmailQuery]);
 
-		list = list.map(item => ({
-			...item,
-			isStar: item.starId != null ? 1 : 0
-		}));
-
+		list = list.map(item => ({ ...item, isStar: item.starId != null ? 1 : 0 }));
 
 		await this.emailAddAtt(c, list);
 
 		if (!latestEmail) {
-			latestEmail = {
-				emailId: 0,
-				accountId: accountId,
-				userId: userId,
-			}
+			latestEmail = { emailId: 0, accountId: accountId, userId: userId };
 		}
 
 		return { list, total: totalRow.total, latestEmail };
@@ -1119,7 +1129,30 @@ const emailService = {
 	async read(c, params, userId) {
 		const { emailIds } = params;
 		await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds)));
-	}
+	},
+
+	async setSpam(c, { emailIds, isSpam }, userId) {
+		const ids = Array.isArray(emailIds) ? emailIds.map(Number) : String(emailIds).split(',').map(Number);
+		await orm(c).update(email).set({ isSpam: Number(isSpam) })
+			.where(and(eq(email.userId, userId), inArray(email.emailId, ids))).run();
+	},
+
+	async setImportant(c, { emailIds, isImportant }, userId) {
+		const ids = Array.isArray(emailIds) ? emailIds.map(Number) : String(emailIds).split(',').map(Number);
+		await orm(c).update(email).set({ isImportant: Number(isImportant) })
+			.where(and(eq(email.userId, userId), inArray(email.emailId, ids))).run();
+	},
+
+	async setPin(c, { emailId, pinned }, userId) {
+		await orm(c).update(email).set({ pinned: Number(pinned) })
+			.where(and(eq(email.userId, userId), eq(email.emailId, Number(emailId)))).run();
+	},
+
+	async setFolder(c, { emailIds, folderId }, userId) {
+		const ids = Array.isArray(emailIds) ? emailIds.map(Number) : String(emailIds).split(',').map(Number);
+		await orm(c).update(email).set({ folderId: Number(folderId) || 0 })
+			.where(and(eq(email.userId, userId), inArray(email.emailId, ids))).run();
+	},
 };
 
 export default emailService;

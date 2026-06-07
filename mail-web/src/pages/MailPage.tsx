@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useParams } from 'react-router-dom';
 import AppSidebar from '@/components/AppSidebar';
 import Composer from '@/components/Composer';
 import MessageDetail from '@/components/MessageDetail';
@@ -14,17 +14,27 @@ export default function MailPage({
   kind: MailboxKind;
   forceDetail?: boolean;
 }) {
+  const { folderId: folderIdParam } = useParams<{ folderId?: string }>();
+  const folderId = kind === 'folder' ? Number(folderIdParam) || 0 : undefined;
+
   const selectedEmail = useAppStore((state) => state.selectedEmail.email);
   const selectedEmailContext = useAppStore((state) => state.selectedEmail);
   const selectEmail = useAppStore((state) => state.selectEmail);
   const sidebarOpen = useAppStore((state) => state.sidebarOpen);
   const sidebarCollapsed = useAppStore((state) => state.sidebarCollapsed);
   const setSidebarOpen = useAppStore((state) => state.setSidebarOpen);
+  const setCurrentFolderId = useAppStore((state) => state.setCurrentFolderId);
   const [mobileDetail, setMobileDetail] = useState(forceDetail);
 
   useEffect(() => {
     setMobileDetail(forceDetail);
   }, [forceDetail]);
+
+  useEffect(() => {
+    if (kind === 'folder' && folderId) {
+      setCurrentFolderId(folderId);
+    }
+  }, [kind, folderId, setCurrentFolderId]);
 
   if (forceDetail && !selectedEmail) {
     return <Navigate replace to="/inbox" />;
@@ -44,7 +54,7 @@ export default function MailPage({
       />
       <AppSidebar />
       <div className="mail-list-pane" data-mobile-hidden={mobileDetail}>
-        <MessageList kind={kind} onOpenDetail={() => setMobileDetail(true)} />
+        <MessageList folderId={folderId} kind={kind} onOpenDetail={() => setMobileDetail(true)} />
       </div>
       <main className="mail-detail-pane" data-mobile-hidden={!mobileDetail && window.innerWidth < 760}>
         <MessageDetail email={selectedEmail} onBack={closeDetail} />

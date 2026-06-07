@@ -31,8 +31,54 @@ const dbInit = {
 		await this.v3_0DB(c);
 		await this.v3_1DB(c);
 		await this.v3_2DB(c);
+		await this.v3_3DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
+	},
+
+	async v3_3DB(c) {
+		const cols = [
+			`ALTER TABLE email ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;`,
+			`ALTER TABLE email ADD COLUMN is_spam INTEGER NOT NULL DEFAULT 0;`,
+			`ALTER TABLE email ADD COLUMN is_important INTEGER NOT NULL DEFAULT 0;`,
+			`ALTER TABLE email ADD COLUMN folder_id INTEGER NOT NULL DEFAULT 0;`,
+		];
+		for (const sql of cols) {
+			try { await c.env.db.prepare(sql).run(); } catch (e) { console.warn(`跳过字段：${e.message}`); }
+		}
+
+		await c.env.db.prepare(`
+			CREATE TABLE IF NOT EXISTS folder (
+				folder_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER NOT NULL,
+				name TEXT NOT NULL,
+				color TEXT NOT NULL DEFAULT '#6366f1',
+				sort INTEGER NOT NULL DEFAULT 0,
+				create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+			)
+		`).run();
+
+		await c.env.db.prepare(`
+			CREATE TABLE IF NOT EXISTS subscription (
+				subscription_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER NOT NULL,
+				sender_email TEXT NOT NULL,
+				name TEXT NOT NULL DEFAULT '',
+				create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+			)
+		`).run();
+
+		try {
+			await c.env.db.batch([
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_folder_user_id ON folder(user_id);`),
+				c.env.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_user_sender ON subscription(user_id, sender_email);`),
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_spam ON email(user_id, is_spam);`),
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_important ON email(user_id, is_important);`),
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_folder ON email(user_id, folder_id);`),
+			]);
+		} catch (e) {
+			console.warn(`跳过索引：${e.message}`);
+		}
 	},
 
 	async v3_2DB(c) {

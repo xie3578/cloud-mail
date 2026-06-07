@@ -42,4 +42,24 @@ app.post('/email/translate', async (c) => {
 app.put('/email/read', async (c) => {
 	await emailService.read(c, await c.req.json(), userContext.getUserId(c));
 	return c.json(result.ok());
-})
+});
+
+app.put('/email/spam', async (c) => {
+	await emailService.setSpam(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok());
+});
+
+app.put('/email/important', async (c) => {
+	await emailService.setImportant(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok());
+});
+
+app.put('/email/pin', async (c) => {
+	await emailService.setPin(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok());
+});
+
+app.put('/email/folder', async (c) => {
+	await emailService.setFolder(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok());
+});
